@@ -596,7 +596,7 @@
             let maxIndex = 0;
 
             for (let i = start + 1; i < end; i++) {
-              const dist = this.perpendicularDistance(
+              const dist = ImageProcessor.perpendicularDistance(
                 points[i],
                 points[start],
                 points[end]
