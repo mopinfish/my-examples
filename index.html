@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MapLibre GL JS デモコレクション</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px 20px;
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 60px;
+        color: white;
+      }
+
+      h1 {
+        font-size: 3em;
+        margin-bottom: 10px;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .subtitle {
+        font-size: 1.2em;
+        opacity: 0.95;
+      }
+
+      .demos-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 30px;
+        margin-top: 40px;
+      }
+
+      .demo-card {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        transition: transform 0.3s, box-shadow 0.3s;
+      }
+
+      .demo-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+      }
+
+      .demo-header {
+        background: linear-gradient(135deg, #4444ff 0%, #6666ff 100%);
+        color: white;
+        padding: 20px;
+      }
+
+      .demo-title {
+        font-size: 1.5em;
+        margin-bottom: 5px;
+      }
+
+      .demo-badge {
+        display: inline-block;
+        background: rgba(255, 255, 255, 0.2);
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.85em;
+        margin-top: 5px;
+      }
+
+      .demo-body {
+        padding: 20px;
+      }
+
+      .demo-description {
+        color: #666;
+        margin-bottom: 20px;
+        min-height: 60px;
+      }
+
+      .demo-features {
+        list-style: none;
+        margin-bottom: 20px;
+      }
+
+      .demo-features li {
+        padding: 5px 0;
+        color: #777;
+        font-size: 0.9em;
+      }
+
+      .demo-features li:before {
+        content: "✓ ";
+        color: #4444ff;
+        font-weight: bold;
+        margin-right: 5px;
+      }
+
+      .demo-link {
+        display: inline-block;
+        background: #4444ff;
+        color: white;
+        padding: 10px 24px;
+        border-radius: 6px;
+        text-decoration: none;
+        font-weight: bold;
+        transition: background 0.3s;
+      }
+
+      .demo-link:hover {
+        background: #6666ff;
+      }
+
+      .github-link {
+        text-align: center;
+        margin-top: 60px;
+      }
+
+      .github-link a {
+        color: white;
+        text-decoration: none;
+        font-size: 1.1em;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 20px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        transition: background 0.3s;
+      }
+
+      .github-link a:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>🗺️ MapLibre GL JS デモコレクション</h1>
+        <p class="subtitle">インタラクティブな地図機能のデモンストレーション</p>
+      </header>
+
+      <div class="demos-grid">
+        <!-- 衝突判定デモ -->
+        <div class="demo-card">
+          <div class="demo-header">
+            <h2 class="demo-title">衝突判定システム</h2>
+            <span class="demo-badge">インタラクティブ</span>
+          </div>
+          <div class="demo-body">
+            <p class="demo-description">
+              複雑な形状のポリゴン同士の高精度な衝突判定をリアルタイムで実行
+            </p>
+            <ul class="demo-features">
+              <li>5種類の形状（星形、六角形など）</li>
+              <li>サイズ調整機能</li>
+              <li>ドラッグ&ドロップ操作</li>
+              <li>ポリゴン交差判定アルゴリズム</li>
+            </ul>
+            <a href="demos/collision-detection/" class="demo-link">
+              デモを見る →
+            </a>
+          </div>
+        </div>
+
+        <!-- 今後追加予定のデモのプレースホルダー -->
+        <div class="demo-card" style="opacity: 0.6">
+          <div
+            class="demo-header"
+            style="background: linear-gradient(135deg, #888 0%, #aaa 100%)"
+          >
+            <h2 class="demo-title">3D建物表示</h2>
+            <span class="demo-badge">近日公開</span>
+          </div>
+          <div class="demo-body">
+            <p class="demo-description">
+              建物を3D表示し、時間帯による影の変化をシミュレーション
+            </p>
+            <ul class="demo-features">
+              <li>リアルタイム3Dレンダリング</li>
+              <li>高さ情報の可視化</li>
+              <li>カメラアングル制御</li>
+            </ul>
+            <span
+              class="demo-link"
+              style="background: #ccc; cursor: not-allowed"
+            >
+              準備中
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="github-link">
+        <a href="https://github.com/[username]/maplibre-demos">
+          <svg height="24" width="24" viewBox="0 0 16 16" fill="currentColor">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+            />
+          </svg>
+          GitHubで見る
+        </a>
+      </div>
+    </div>
+  </body>
+</html>

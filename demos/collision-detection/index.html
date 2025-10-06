@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapLibre GL JS - 複雑な形状での高精度衝突判定</title>
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1;
+            max-width: 380px;
+        }
+        
+        .info-panel h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        
+        .control-section {
+            margin: 15px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        
+        .control-label {
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #555;
+            font-size: 14px;
+        }
+        
+        .size-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 8px;
+        }
+        
+        .size-slider {
+            flex: 1;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: #ddd;
+            border-radius: 3px;
+            outline: none;
+        }
+        
+        .size-slider:hover {
+            background: #ccc;
+        }
+        
+        .size-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #4444ff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: all 0.2s;
+        }
+        
+        .size-slider::-webkit-slider-thumb:hover {
+            background: #6666ff;
+            transform: scale(1.1);
+        }
+        
+        .size-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #4444ff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            border: none;
+            transition: all 0.2s;
+        }
+        
+        .size-slider::-moz-range-thumb:hover {
+            background: #6666ff;
+            transform: scale(1.1);
+        }
+        
+        .size-value {
+            min-width: 45px;
+            text-align: center;
+            font-weight: bold;
+            color: #4444ff;
+            font-size: 16px;
+        }
+        
+        .size-presets {
+            display: flex;
+            gap: 5px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .preset-btn {
+            padding: 3px 8px;
+            border: 1px solid #ccc;
+            background: white;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        
+        .preset-btn:hover {
+            background: #f0f0f0;
+            border-color: #4444ff;
+        }
+        
+        .status {
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .status.safe {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.collision {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            animation: pulse 0.5s;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .coordinates {
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+        }
+        
+        .collision-list {
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        
+        .collision-item {
+            background: #fff3cd;
+            padding: 5px 8px;
+            margin: 5px 0;
+            border-radius: 3px;
+            border-left: 3px solid #ffc107;
+        }
+        
+        .shape-selector {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+        
+        .shape-btn {
+            padding: 5px 10px;
+            border: 2px solid #4444ff;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        
+        .shape-btn.active {
+            background: #4444ff;
+            color: white;
+        }
+        
+        .shape-btn:hover {
+            background: #6666ff;
+            color: white;
+        }
+        
+        .debug-info {
+            font-size: 11px;
+            color: #999;
+            margin-top: 5px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+        
+        .stat-item {
+            padding: 5px;
+            background: #f0f0f0;
+            border-radius: 3px;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 10px;
+        }
+        
+        .stat-value {
+            font-weight: bold;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="info-panel">
+        <h3>🎯 高精度衝突判定デモ</h3>
+        
+        <div class="control-section">
+            <div class="control-label">📐 形状を選択</div>
+            <div class="shape-selector">
+                <button class="shape-btn active" data-shape="star">⭐ 星形</button>
+                <button class="shape-btn" data-shape="hexagon">⬡ 六角形</button>
+                <button class="shape-btn" data-shape="triangle">▲ 三角形</button>
+                <button class="shape-btn" data-shape="cross">✚ 十字</button>
+                <button class="shape-btn" data-shape="circle">● 円形</button>
+            </div>
+        </div>
+        
+        <div class="control-section">
+            <div class="control-label">📏 サイズ調整</div>
+            <div class="size-control">
+                <span style="font-size: 12px;">10m</span>
+                <input type="range" class="size-slider" id="sizeSlider" 
+                       min="10" max="60" value="25" step="1">
+                <span style="font-size: 12px;">60m</span>
+                <div class="size-value" id="sizeValue">25m</div>
+            </div>
+            <div class="size-presets">
+                <button class="preset-btn" data-size="10">極小</button>
+                <button class="preset-btn" data-size="15">小</button>
+                <button class="preset-btn" data-size="25">標準</button>
+                <button class="preset-btn" data-size="35">大</button>
+                <button class="preset-btn" data-size="50">特大</button>
+                <button class="preset-btn" data-size="60">最大</button>
+            </div>
+        </div>
+        
+        <div id="status" class="status safe">衝突なし</div>
+        <div id="collisions" class="collision-list"></div>
+        
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-label">現在の形状</div>
+                <div class="stat-value" id="currentShapeDisplay">星形</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">現在のサイズ</div>
+                <div class="stat-value" id="currentSizeDisplay">25m</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">面積（概算）</div>
+                <div class="stat-value" id="areaDisplay">-</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">頂点数</div>
+                <div class="stat-value" id="verticesDisplay">-</div>
+            </div>
+        </div>
+        
+        <div id="coordinates" class="coordinates"></div>
+        <div id="debug" class="debug-info"></div>
+    </div>
+
+    <script>
+        // マップの初期化
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    'osm': {
+                        type: 'raster',
+                        tiles: [
+                            'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                        ],
+                        tileSize: 256,
+                        attribution: '© OpenStreetMap contributors'
+                    }
+                },
+                layers: [{
+                    id: 'osm',
+                    type: 'raster',
+                    source: 'osm'
+                }]
+            },
+            center: [139.7670, 35.6814],
+            zoom: 16
+        });
+
+        // 現在の設定
+        let currentShape = 'star';
+        let currentSize = 25; // メートル単位
+        
+        // 形状名のマッピング
+        const shapeNames = {
+            'star': '星形',
+            'hexagon': '六角形',
+            'triangle': '三角形',
+            'cross': '十字形',
+            'circle': '円形'
+        };
+        
+        // 形状生成関数（メートル単位で座標を生成）
+        function createShape(type, center, sizeInMeters) {
+            const [lng, lat] = center;
+            const earthRadius = 6371000; // 地球の半径（メートル）
+            
+            // メートルを緯度・経度に変換
+            const latOffset = (sizeInMeters / earthRadius) * (180 / Math.PI);
+            const lngOffset = (sizeInMeters / earthRadius) * (180 / Math.PI) / Math.cos(lat * Math.PI / 180);
+            
+            let points = [];
+            
+            switch(type) {
+                case 'star':
+                    // 5芒星を生成
+                    for (let i = 0; i < 10; i++) {
+                        const angle = (Math.PI * 2 * i) / 10 - Math.PI / 2;
+                        const radius = i % 2 === 0 ? 1 : 0.4; // 外側と内側の頂点
+                        points.push([
+                            lng + lngOffset * radius * Math.cos(angle),
+                            lat + latOffset * radius * Math.sin(angle)
+                        ]);
+                    }
+                    break;
+                    
+                case 'hexagon':
+                    // 六角形を生成
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (Math.PI * 2 * i) / 6;
+                        points.push([
+                            lng + lngOffset * Math.cos(angle),
+                            lat + latOffset * Math.sin(angle)
+                        ]);
+                    }
+                    break;
+                    
+                case 'triangle':
+                    // 正三角形を生成
+                    for (let i = 0; i < 3; i++) {
+                        const angle = (Math.PI * 2 * i) / 3 - Math.PI / 2;
+                        points.push([
+                            lng + lngOffset * Math.cos(angle),
+                            lat + latOffset * Math.sin(angle)
+                        ]);
+                    }
+                    break;
+                    
+                case 'cross':
+                    // 十字形を生成
+                    const w = 0.3; // 幅の係数
+                    points = [
+                        [lng - lngOffset * w, lat + latOffset],
+                        [lng + lngOffset * w, lat + latOffset],
+                        [lng + lngOffset * w, lat + latOffset * w],
+                        [lng + lngOffset, lat + latOffset * w],
+                        [lng + lngOffset, lat - latOffset * w],
+                        [lng + lngOffset * w, lat - latOffset * w],
+                        [lng + lngOffset * w, lat - latOffset],
+                        [lng - lngOffset * w, lat - latOffset],
+                        [lng - lngOffset * w, lat - latOffset * w],
+                        [lng - lngOffset, lat - latOffset * w],
+                        [lng - lngOffset, lat + latOffset * w],
+                        [lng - lngOffset * w, lat + latOffset * w]
+                    ];
+                    break;
+                    
+                case 'circle':
+                    // 円形（32角形で近似）
+                    for (let i = 0; i < 32; i++) {
+                        const angle = (Math.PI * 2 * i) / 32;
+                        points.push([
+                            lng + lngOffset * Math.cos(angle),
+                            lat + latOffset * Math.sin(angle)
+                        ]);
+                    }
+                    break;
+            }
+            
+            // ポリゴンを閉じる
+            points.push(points[0]);
+            return points;
+        }
+
+        // ポリゴンの面積を計算（Shoelace formula）
+        function calculatePolygonArea(polygon) {
+            let area = 0;
+            const n = polygon.length - 1; // 最後の点は最初と同じ
+            
+            for (let i = 0; i < n; i++) {
+                const j = (i + 1) % n;
+                // 緯度経度をメートルに変換して計算
+                const earthRadius = 6371000;
+                const lat = polygon[i][1];
+                const x1 = polygon[i][0] * Math.PI / 180 * earthRadius * Math.cos(lat * Math.PI / 180);
+                const y1 = polygon[i][1] * Math.PI / 180 * earthRadius;
+                const x2 = polygon[j][0] * Math.PI / 180 * earthRadius * Math.cos(lat * Math.PI / 180);
+                const y2 = polygon[j][1] * Math.PI / 180 * earthRadius;
+                
+                area += (x1 * y2 - x2 * y1);
+            }
+            
+            return Math.abs(area) / 2;
+        }
+
+        // ポリゴン衝突判定（SAT: Separating Axis Theorem）
+        function polygonsIntersect(poly1, poly2) {
+            // 点がポリゴン内にあるかチェック（Ray Casting Algorithm）
+            function pointInPolygon(point, polygon) {
+                let inside = false;
+                const x = point[0], y = point[1];
+                
+                for (let i = 0, j = polygon.length - 2; i < polygon.length - 1; j = i++) {
+                    const xi = polygon[i][0], yi = polygon[i][1];
+                    const xj = polygon[j][0], yj = polygon[j][1];
+                    
+                    const intersect = ((yi > y) !== (yj > y))
+                        && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                    if (intersect) inside = !inside;
+                }
+                
+                return inside;
+            }
+            
+            // 線分の交差判定
+            function lineSegmentsIntersect(p1, p2, p3, p4) {
+                const ccw = (A, B, C) => {
+                    return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0]);
+                };
+                return ccw(p1, p3, p4) !== ccw(p2, p3, p4) && ccw(p1, p2, p3) !== ccw(p1, p2, p4);
+            }
+            
+            // いずれかの頂点が相手のポリゴン内にある場合
+            for (let i = 0; i < poly1.length - 1; i++) {
+                if (pointInPolygon(poly1[i], poly2)) return true;
+            }
+            for (let i = 0; i < poly2.length - 1; i++) {
+                if (pointInPolygon(poly2[i], poly1)) return true;
+            }
+            
+            // エッジ同士の交差をチェック
+            for (let i = 0; i < poly1.length - 1; i++) {
+                for (let j = 0; j < poly2.length - 1; j++) {
+                    if (lineSegmentsIntersect(
+                        poly1[i], poly1[i + 1],
+                        poly2[j], poly2[j + 1]
+                    )) {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
+        }
+
+        // ポリゴンの中心点を計算
+        function getPolygonCenter(polygon) {
+            let sumLng = 0, sumLat = 0;
+            const count = polygon.length - 1; // 最後の点は最初の点と同じ
+            for (let i = 0; i < count; i++) {
+                sumLng += polygon[i][0];
+                sumLat += polygon[i][1];
+            }
+            return [sumLng / count, sumLat / count];
+        }
+
+        // 距離計算
+        function calculateDistance(coord1, coord2) {
+            const R = 6371000;
+            const rad = Math.PI / 180;
+            const lat1 = coord1[1] * rad;
+            const lat2 = coord2[1] * rad;
+            const deltaLat = (coord2[1] - coord1[1]) * rad;
+            const deltaLng = (coord2[0] - coord1[0]) * rad;
+
+            const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+                     Math.cos(lat1) * Math.cos(lat2) *
+                     Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            
+            return R * c;
+        }
+
+        // POIデータ
+        const poiData = {
+            type: 'FeatureCollection',
+            features: [
+                {
+                    type: 'Feature',
+                    properties: { 
+                        name: '東京駅',
+                        shapeType: 'hexagon',
+                        size: 30
+                    },
+                    geometry: {
+                        type: 'Polygon',
+                        coordinates: [createShape('hexagon', [139.7671, 35.6812], 30)]
+                    }
+                },
+                {
+                    type: 'Feature',
+                    properties: { 
+                        name: '皇居',
+                        shapeType: 'star',
+                        size: 40
+                    },
+                    geometry: {
+                        type: 'Polygon',
+                        coordinates: [createShape('star', [139.7536, 35.6852], 40)]
+                    }
+                },
+                {
+                    type: 'Feature',
+                    properties: { 
+                        name: '日比谷公園',
+                        shapeType: 'triangle',
+                        size: 35
+                    },
+                    geometry: {
+                        type: 'Polygon',
+                        coordinates: [createShape('triangle', [139.7563, 35.6742], 35)]
+                    }
+                },
+                {
+                    type: 'Feature',
+                    properties: { 
+                        name: '銀座',
+                        shapeType: 'cross',
+                        size: 30
+                    },
+                    geometry: {
+                        type: 'Polygon',
+                        coordinates: [createShape('cross', [139.7638, 35.6719], 30)]
+                    }
+                },
+                {
+                    type: 'Feature',
+                    properties: { 
+                        name: '有楽町駅',
+                        shapeType: 'circle',
+                        size: 25
+                    },
+                    geometry: {
+                        type: 'Polygon',
+                        coordinates: [createShape('circle', [139.7638, 35.6751], 25)]
+                    }
+                }
+            ]
+        };
+
+        // ドラッグ可能マーカーの初期データ
+        let draggableCenter = [139.7600, 35.6780];
+        const draggableMarker = {
+            type: 'FeatureCollection',
+            features: [{
+                type: 'Feature',
+                properties: { 
+                    name: 'ドラッグ可能図形',
+                    shapeType: currentShape,
+                    size: currentSize
+                },
+                geometry: {
+                    type: 'Polygon',
+                    coordinates: [createShape(currentShape, draggableCenter, currentSize)]
+                }
+            }]
+        };
+
+        // 衝突判定
+        function checkCollisions() {
+            const collisions = [];
+            const draggablePolygon = draggableMarker.features[0].geometry.coordinates[0];
+            
+            poiData.features.forEach(poi => {
+                const poiPolygon = poi.geometry.coordinates[0];
+                
+                if (polygonsIntersect(draggablePolygon, poiPolygon)) {
+                    const poiCenter = getPolygonCenter(poiPolygon);
+                    const distance = calculateDistance(draggableCenter, poiCenter);
+                    
+                    collisions.push({
+                        name: poi.properties.name,
+                        shapeType: poi.properties.shapeType,
+                        size: poi.properties.size,
+                        distance: Math.round(distance),
+                        intersecting: true
+                    });
+                }
+            });
+            
+            return collisions;
+        }
+
+        // 統計情報の更新
+        function updateStats() {
+            const polygon = draggableMarker.features[0].geometry.coordinates[0];
+            const area = calculatePolygonArea(polygon);
+            const vertices = polygon.length - 1; // 最後の点を除く
+            
+            document.getElementById('currentShapeDisplay').textContent = shapeNames[currentShape];
+            document.getElementById('currentSizeDisplay').textContent = `${currentSize}m`;
+            document.getElementById('areaDisplay').textContent = `${Math.round(area)}m²`;
+            document.getElementById('verticesDisplay').textContent = vertices;
+        }
+
+        // UI更新
+        function updateUI() {
+            const collisions = checkCollisions();
+            const statusEl = document.getElementById('status');
+            const collisionsEl = document.getElementById('collisions');
+            const coordsEl = document.getElementById('coordinates');
+            const debugEl = document.getElementById('debug');
+            
+            coordsEl.innerHTML = `中心座標: [${draggableCenter[0].toFixed(4)}, ${draggableCenter[1].toFixed(4)}]`;
+            debugEl.innerHTML = `判定方式: ポリゴン交差判定 | ズームレベル: ${map.getZoom().toFixed(1)}`;
+            
+            updateStats();
+            
+            if (collisions.length > 0) {
+                statusEl.className = 'status collision';
+                statusEl.textContent = `⚠️ ${collisions.length}件の衝突を検出`;
+                
+                collisionsEl.innerHTML = collisions.map(c => 
+                    `<div class="collision-item">
+                        <strong>${c.name}</strong> (${c.shapeType}, ${c.size}m)
+                        <br>中心間距離: ${c.distance}m
+                        <br>状態: ポリゴンが交差
+                    </div>`
+                ).join('');
+                
+                // 衝突している図形を赤く表示
+                map.setPaintProperty('draggable-fill', 'fill-color', 'rgba(255, 100, 100, 0.6)');
+                map.setPaintProperty('draggable-outline', 'line-color', '#ff4444');
+            } else {
+                statusEl.className = 'status safe';
+                statusEl.textContent = '✓ 衝突なし';
+                collisionsEl.innerHTML = '';
+                
+                // 通常の色に戻す
+                map.setPaintProperty('draggable-fill', 'fill-color', 'rgba(100, 100, 255, 0.4)');
+                map.setPaintProperty('draggable-outline', 'line-color', '#4444ff');
+            }
+        }
+
+        // 形状とサイズの更新
+        function updateDraggableShapeAndSize() {
+            draggableMarker.features[0].geometry.coordinates = [
+                createShape(currentShape, draggableCenter, currentSize)
+            ];
+            draggableMarker.features[0].properties.shapeType = currentShape;
+            draggableMarker.features[0].properties.size = currentSize;
+            
+            if (map.getSource('draggable')) {
+                map.getSource('draggable').setData(draggableMarker);
+                updateUI();
+            }
+        }
+
+        // サイズスライダーのイベント
+        const sizeSlider = document.getElementById('sizeSlider');
+        const sizeValue = document.getElementById('sizeValue');
+        
+        sizeSlider.addEventListener('input', (e) => {
+            currentSize = parseInt(e.target.value);
+            sizeValue.textContent = `${currentSize}m`;
+            updateDraggableShapeAndSize();
+        });
+
+        // プリセットボタンのイベント
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const size = parseInt(e.target.dataset.size);
+                currentSize = size;
+                sizeSlider.value = size;
+                sizeValue.textContent = `${size}m`;
+                updateDraggableShapeAndSize();
+            });
+        });
+
+        // 形状選択ボタンのイベント
+        document.querySelectorAll('.shape-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                currentShape = e.target.dataset.shape;
+                updateDraggableShapeAndSize();
+            });
+        });
+
+        map.on('load', () => {
+            // POIの追加
+            map.addSource('pois', {
+                type: 'geojson',
+                data: poiData
+            });
+            
+            // POIのポリゴン表示
+            map.addLayer({
+                id: 'poi-fill',
+                type: 'fill',
+                source: 'pois',
+                paint: {
+                    'fill-color': 'rgba(255, 100, 100, 0.4)',
+                    'fill-outline-color': '#ff4444'
+                }
+            });
+            
+            // POIの輪郭線
+            map.addLayer({
+                id: 'poi-outline',
+                type: 'line',
+                source: 'pois',
+                paint: {
+                    'line-color': '#ff4444',
+                    'line-width': 2
+                }
+            });
+            
+            // POIラベル
+            map.addLayer({
+                id: 'poi-labels',
+                type: 'symbol',
+                source: 'pois',
+                layout: {
+                    'text-field': ['concat', ['get', 'name'], '\n', ['get', 'size'], 'm'],
+                    'text-size': 11,
+                    'text-anchor': 'center',
+                    'text-line-height': 1.2
+                },
+                paint: {
+                    'text-color': '#333',
+                    'text-halo-color': '#fff',
+                    'text-halo-width': 2
+                }
+            });
+            
+            // ドラッグ可能マーカーの追加
+            map.addSource('draggable', {
+                type: 'geojson',
+                data: draggableMarker
+            });
+            
+            // ドラッグ可能マーカーのポリゴン表示
+            map.addLayer({
+                id: 'draggable-fill',
+                type: 'fill',
+                source: 'draggable',
+                paint: {
+                    'fill-color': 'rgba(100, 100, 255, 0.4)',
+                    'fill-outline-color': '#4444ff'
+                }
+            });
+            
+            // ドラッグ可能マーカーの輪郭線
+            map.addLayer({
+                id: 'draggable-outline',
+                type: 'line',
+                source: 'draggable',
+                paint: {
+                    'line-color': '#4444ff',
+                    'line-width': 3
+                }
+            });
+            
+            // ドラッグ可能マーカーのラベル
+            map.addLayer({
+                id: 'draggable-label',
+                type: 'symbol',
+                source: 'draggable',
+                layout: {
+                    'text-field': ['concat', 'ドラッグ\n', ['get', 'size'], 'm'],
+                    'text-size': 11,
+                    'text-anchor': 'center',
+                    'text-line-height': 1.2
+                },
+                paint: {
+                    'text-color': '#fff',
+                    'text-halo-color': '#4444ff',
+                    'text-halo-width': 2
+                }
+            });
+            
+            // ドラッグ機能
+            let isDragging = false;
+            
+            map.on('mouseenter', 'draggable-fill', () => {
+                map.getCanvas().style.cursor = 'move';
+            });
+            
+            map.on('mouseleave', 'draggable-fill', () => {
+                if (!isDragging) {
+                    map.getCanvas().style.cursor = '';
+                }
+            });
+            
+            map.on('mousedown', 'draggable-fill', (e) => {
+                e.preventDefault();
+                isDragging = true;
+                map.getCanvas().style.cursor = 'grabbing';
+                map.dragPan.disable();
+            });
+            
+            map.on('mousemove', (e) => {
+                if (!isDragging) return;
+                
+                draggableCenter = [e.lngLat.lng, e.lngLat.lat];
+                draggableMarker.features[0].geometry.coordinates = [
+                    createShape(currentShape, draggableCenter, currentSize)
+                ];
+                map.getSource('draggable').setData(draggableMarker);
+                updateUI();
+            });
+            
+            map.on('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    map.getCanvas().style.cursor = '';
+                    map.dragPan.enable();
+                }
+            });
+            
+            // タッチ対応
+            let touchId = null;
+            
+            map.on('touchstart', 'draggable-fill', (e) => {
+                if (e.points.length !== 1) return;
+                e.preventDefault();
+                
+                touchId = e.originalEvent.touches[0].identifier;
+                isDragging = true;
+                map.dragPan.disable();
+            });
+            
+            map.on('touchmove', (e) => {
+                if (!isDragging || touchId === null) return;
+                
+                const touch = e.originalEvent.touches[0];
+                if (touch.identifier !== touchId) return;
+                
+                draggableCenter = [e.lngLat.lng, e.lngLat.lat];
+                draggableMarker.features[0].geometry.coordinates = [
+                    createShape(currentShape, draggableCenter, currentSize)
+                ];
+                map.getSource('draggable').setData(draggableMarker);
+                updateUI();
+            });
+            
+            map.on('touchend', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    touchId = null;
+                    map.dragPan.enable();
+                }
+            });
+            
+            // ズーム変更時の更新
+            map.on('zoom', () => {
+                updateUI();
+            });
+            
+            updateUI();
+        });
+
+        // ナビゲーションコントロール
+        map.addControl(new maplibregl.NavigationControl());
+    </script>
+</body>
+</html>
