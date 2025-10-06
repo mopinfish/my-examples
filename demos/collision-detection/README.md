@@ -515,6 +515,235 @@ PNG画像 → Canvas描画 → ピクセルデータ取得 → アルファチ�
 → 2値化 → 輪郭追跡 → 簡略化 → 座標正規化 → ポリゴン生成
 ```
 
+### 処理フローチャート
+
+```mermaid
+flowchart TB
+    Start([ユーザーが画像をアップロード]) --> Upload{アップロード方法}
+    Upload -->|ドラッグ&ドロップ| FileAPI1[File API]
+    Upload -->|ファイル選択| FileAPI2[File API]
+
+    FileAPI1 --> Validate{PNG形式？}
+    FileAPI2 --> Validate
+
+    Validate -->|No| Error1[エラー表示]
+    Validate -->|Yes| LoadImage[画像を読み込み]
+
+    LoadImage --> CreateCanvas[Canvas要素を作成]
+    CreateCanvas --> CheckSize{サイズチェック}
+
+    CheckSize -->|大きすぎる| Resize[リサイズ処理]
+    CheckSize -->|適切| DrawCanvas
+    Resize --> DrawCanvas[Canvasに描画]
+
+    DrawCanvas --> GetImageData[getImageData()でピクセルデータ取得]
+    GetImageData --> ExtractAlpha[アルファチャンネル抽出]
+
+    ExtractAlpha --> Threshold{閾値処理}
+    Threshold --> Binary[2値マスク生成]
+
+    Binary --> MooreTracing[Moore近傍追跡]
+    MooreTracing --> ContourPoints[輪郭点配列]
+
+    ContourPoints --> DouglasPeucker[Douglas-Peucker簡略化]
+    DouglasPeucker --> SimplifiedContour[簡略化された輪郭]
+
+    SimplifiedContour --> Normalize[座標正規化]
+    Normalize --> StoreContour[(輪郭データを保存)]
+
+    StoreContour --> UpdateUI[UI更新]
+    UpdateUI --> ShowPreview[プレビュー表示]
+
+    ShowPreview --> UserAdjust{ユーザー調整}
+    UserAdjust -->|精度変更| DouglasPeucker
+    UserAdjust -->|閾値変更| Threshold
+    UserAdjust -->|完了| UseInMap
+
+    UseInMap[地図で使用] --> DragEvent{ドラッグイベント}
+    DragEvent --> ConvertGeo[地理座標に変換]
+    ConvertGeo --> CreatePolygon[ポリゴン生成]
+    CreatePolygon --> CollisionCheck[衝突判定]
+
+    CollisionCheck --> CheckIntersect{交差チェック}
+    CheckIntersect -->|衝突あり| ShowCollision[衝突表示]
+    CheckIntersect -->|衝突なし| ShowSafe[安全表示]
+
+    ShowCollision --> UpdateMap[地図更新]
+    ShowSafe --> UpdateMap
+    UpdateMap --> DragEvent
+```
+
+### データフロー図
+
+```mermaid
+graph LR
+    subgraph Input [入力データ]
+        PNG[PNG画像ファイル]
+        Settings[ユーザー設定<br/>・透明度閾値<br/>・簡略化レベル]
+    end
+
+    subgraph Processing [画像処理]
+        Canvas[Canvas API]
+        ImageData[ImageData<br/>RGBA配列]
+        AlphaData[アルファチャンネル<br/>0-255の配列]
+        BinaryMask[2値マスク<br/>0/1の2次元配列]
+        Contour[輪郭座標<br/>x,y の配列]
+        Simplified[簡略化輪郭<br/>削減された頂点]
+        Normalized[正規化座標<br/>-1〜1の範囲]
+    end
+
+    subgraph Geographic [地理データ変換]
+        GeoCenter[中心座標<br/>lng, lat]
+        Size[サイズ<br/>メートル単位]
+        GeoPolygon[地理ポリゴン<br/>緯度経度の配列]
+    end
+
+    subgraph Output [出力]
+        MapLayer[MapLibre レイヤー]
+        Collision[衝突判定結果]
+        Visual[視覚的フィードバック]
+    end
+
+    PNG --> Canvas
+    Settings --> Canvas
+    Canvas --> ImageData
+    ImageData --> AlphaData
+    AlphaData --> BinaryMask
+    BinaryMask --> Contour
+    Contour --> Simplified
+    Simplified --> Normalized
+
+    Normalized --> GeoPolygon
+    GeoCenter --> GeoPolygon
+    Size --> GeoPolygon
+
+    GeoPolygon --> MapLayer
+    GeoPolygon --> Collision
+    Collision --> Visual
+```
+
+### 衝突判定アルゴリズムの流れ
+
+```mermaid
+flowchart LR
+    subgraph Polygon1 [ドラッグ可能ポリゴン]
+        P1V[頂点配列]
+        P1E[エッジ配列]
+    end
+
+    subgraph Polygon2 [POIポリゴン]
+        P2V[頂点配列]
+        P2E[エッジ配列]
+    end
+
+    subgraph Detection [衝突検出処理]
+        PointInPoly[点のポリゴン内判定]
+        EdgeIntersect[エッジ交差判定]
+
+        subgraph RayCasting [Ray Casting]
+            Ray[水平半直線]
+            CrossCount[交差回数カウント]
+            OddEven[奇数/偶数判定]
+        end
+
+        subgraph CCW [CCW Test]
+            Orient[3点の方向判定]
+            Intersect[線分交差チェック]
+        end
+    end
+
+    P1V --> PointInPoly
+    P2V --> PointInPoly
+    PointInPoly --> RayCasting
+    RayCasting --> OddEven
+
+    P1E --> EdgeIntersect
+    P2E --> EdgeIntersect
+    EdgeIntersect --> CCW
+    CCW --> Intersect
+
+    OddEven --> Result{衝突？}
+    Intersect --> Result
+
+    Result -->|Yes| Collision[衝突検出]
+    Result -->|No| Safe[衝突なし]
+```
+
+### 座標変換プロセス
+
+```mermaid
+graph TB
+    subgraph ImageSpace [画像空間]
+        Pixel[ピクセル座標<br/>0,0 〜 width,height]
+        Centered[中心化座標<br/>-width/2 〜 +width/2]
+        Normalized[正規化座標<br/>-1 〜 +1]
+    end
+
+    subgraph GeoSpace [地理空間]
+        Meters[メートル単位<br/>実世界のサイズ]
+        Offset[緯度経度オフセット<br/>度単位の変位]
+        LatLng[絶対座標<br/>緯度, 経度]
+    end
+
+    subgraph Calculations [計算処理]
+        BBox[バウンディングボックス計算]
+        Scale[スケール係数計算]
+        EarthRadius[地球半径: 6371000m]
+        LatCorrection[緯度補正<br/>cos(lat)]
+    end
+
+    Pixel --> BBox
+    BBox --> Centered
+    Centered --> Scale
+    Scale --> Normalized
+
+    Normalized --> Meters
+    Meters --> EarthRadius
+    EarthRadius --> Offset
+    Offset --> LatCorrection
+    LatCorrection --> LatLng
+
+    style ImageSpace fill:#e1f5fe
+    style GeoSpace fill:#fff3e0
+    style Calculations fill:#f3e5f5
+```
+
+### パフォーマンス最適化フロー
+
+```mermaid
+flowchart TB
+    Input[入力画像] --> SizeCheck{サイズチェック}
+
+    SizeCheck -->|大きい| Resize[リサイズ処理]
+    SizeCheck -->|適切| Cache{キャッシュ確認}
+
+    Resize --> Cache
+
+    Cache -->|ヒット| UseCached[キャッシュ使用]
+    Cache -->|ミス| Process[画像処理]
+
+    Process --> Parallel{並列処理可能？}
+
+    Parallel -->|Yes| WebWorker[Web Worker]
+    Parallel -->|No| MainThread[メインスレッド]
+
+    WebWorker --> Heavy[重い処理<br/>・輪郭抽出<br/>・簡略化]
+    MainThread --> Light[軽い処理<br/>・UI更新<br/>・描画]
+
+    Heavy --> Merge[結果統合]
+    Light --> Merge
+
+    Merge --> SaveCache[キャッシュ保存]
+    SaveCache --> Result[処理結果]
+    UseCached --> Result
+
+    Result --> Monitor{パフォーマンス監視}
+    Monitor -->|遅い| Optimize[最適化<br/>・頂点削減<br/>・解像度低下]
+    Monitor -->|OK| Display[表示]
+
+    Optimize --> Display
+```
+
 ## Canvas API によるピクセルデータ解析
 
 ### 1. 画像の読み込みと Canvas 描画
